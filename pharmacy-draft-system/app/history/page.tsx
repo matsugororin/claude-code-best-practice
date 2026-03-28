@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { prisma } from "@/server/db";
 import type { Warning } from "@/lib/types";
@@ -55,7 +57,7 @@ export default async function HistoryPage() {
         <div className="space-y-2">
           {sessions.map((session) => {
             const latestDraft = session.drafts[0];
-            const warnings = (session.warnings as Warning[]) ?? [];
+            const warnings = (session.warnings as unknown as Warning[]) ?? [];
             const hasCritical = warnings.some((w) => w.severity === "critical");
             const warningCount = warnings.length;
             const status = latestDraft?.status ?? "draft";

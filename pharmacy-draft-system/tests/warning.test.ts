@@ -26,7 +26,7 @@ const baseENT: ENTIntermediateJSON = {
 const baseMental: MentalIntermediateJSON = {
   domain: "mental",
   freeText: "test",
-  prescriptionType: "continued",
+  prescriptionType: "do",
   diseases: ["うつ状態"],
   detectedMedications: [],
   symptoms: [],

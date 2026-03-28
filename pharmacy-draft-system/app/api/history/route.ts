@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
     const items: HistoryItem[] = sessions.map((session) => {
       const latestDraft = session.drafts[0];
-      const warnings = (session.warnings as Warning[]) ?? [];
+      const warnings = (session.warnings as unknown as Warning[]) ?? [];
       return {
         sessionId: session.id,
         draftId: latestDraft?.id ?? "",
@@ -44,9 +44,9 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const total = await prisma.generationSession.count(
-      domain ? { where: { domain } } : undefined
-    );
+    const total = await prisma.generationSession.count({
+      where: domain ? { domain } : undefined,
+    });
 
     return NextResponse.json({ items, total, limit, offset });
   } catch (error) {

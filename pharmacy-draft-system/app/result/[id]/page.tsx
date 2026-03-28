@@ -25,7 +25,7 @@ export default async function ResultPage({ params }: Props) {
     notFound();
   }
 
-  const warnings = (draft.session.warnings as Warning[]) ?? [];
+  const warnings = (draft.session.warnings as unknown as Warning[]) ?? [];
 
   const sections: DraftSections = {
     S: draft.sectionS,

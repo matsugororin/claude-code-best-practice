@@ -57,7 +57,7 @@ function extractSubjectiveNotes(freeText: string): string[] {
   ];
 
   for (const pattern of SUBJECTIVE_PATTERNS) {
-    const matches = freeText.matchAll(pattern);
+    const matches = Array.from(freeText.matchAll(pattern));
     for (const match of matches) {
       const note = match[1]?.trim();
       if (note && !notes.includes(note)) {

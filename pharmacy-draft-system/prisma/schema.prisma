@@ -1,0 +1,117 @@
+// Pharmacy Draft System - Prisma Schema
+// Domain: ENT (耳鼻科) and Mental (メンタル) medication history drafting
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Core session that ties everything together ──────────────────────────────
+model GenerationSession {
+  id                  String        @id @default(cuid())
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  domain              String        // "ent" | "mental"
+  freeText            String
+  prescriptionType    String        // "do" | "new" | "changed"
+  diseases            Json          // string[]
+  detectedMedications Json          // string[]
+  structuredPayload   Json          // IntermediateJSON
+  warnings            Json          // Warning[]
+
+  drafts    DraftRecord[]
+  auditLogs AuditLog[]
+
+  @@index([domain])
+  @@index([createdAt])
+}
+
+// ─── Generated draft sections, editable by pharmacist ────────────────────────
+model DraftRecord {
+  id          String    @id @default(cuid())
+  sessionId   String
+  sectionS    String    @db.Text   // 患者訴え・服薬状況
+  sectionO    String    @db.Text   // 処方内容・検査値
+  sectionA    String    @db.Text   // 評価・注意点
+  sectionEp   String    @db.Text   // 服薬指導内容
+  sectionOP   String    @db.Text   // 次回確認事項
+  finalText   String?   @db.Text   // 全文コピー用 (pharmacist confirmed)
+  status      String    @default("draft")  // "draft" | "confirmed"
+  confirmedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  session GenerationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([status])
+}
+
+// ─── Immutable audit trail for compliance ────────────────────────────────────
+model AuditLog {
+  id          String   @id @default(cuid())
+  sessionId   String
+  actionType  String   // "generate" | "edit" | "confirm" | "copy" | "view"
+  payloadJson Json     // Snapshot of relevant data at the time of action
+  createdAt   DateTime @default(now())
+
+  session GenerationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([actionType])
+  @@index([createdAt])
+}
+
+// ─── Medication master data for rule-based extraction ────────────────────────
+model MedicationMaster {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  aliases      Json     // string[] — generic names, brand names, abbreviations
+  category     String   // "antihistamine" | "nasal_steroid" | "ssri" | etc.
+  domain       String   // "ent" | "mental" | "both"
+  guidanceJson Json     // Structured guidance points for Ep section
+  warningJson  Json     // Structured warning conditions
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([domain])
+  @@index([category])
+  @@index([active])
+}
+
+// ─── Disease-specific section templates ──────────────────────────────────────
+model DiseaseTemplate {
+  id           String   @id @default(cuid())
+  domain       String
+  diseaseName  String
+  templateJson Json     // Per-section template strings with placeholders
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([domain, diseaseName])
+  @@index([domain])
+  @@index([active])
+}
+
+// ─── Warning rules evaluated against structured JSON ─────────────────────────
+model WarningRule {
+  id            String   @id @default(cuid())
+  domain        String   // "ent" | "mental" | "both"
+  ruleName      String   @unique
+  conditionJson Json     // Rule condition expressed as JSON logic or key-value
+  severity      String   // "info" | "caution" | "warning" | "critical"
+  message       String   @db.Text
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([domain])
+  @@index([severity])
+  @@index([active])
+}

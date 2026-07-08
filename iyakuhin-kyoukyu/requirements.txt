@@ -1,0 +1,7 @@
+# 医薬品供給状況 検索ツール — Python 依存関係
+# 依存は最小限に保つ（一覧ページ取得・HTML解析・Excel読み込みのみ）。
+requests>=2.31
+beautifulsoup4>=4.12
+pandas>=2.0
+openpyxl>=3.1
+lxml>=5.0

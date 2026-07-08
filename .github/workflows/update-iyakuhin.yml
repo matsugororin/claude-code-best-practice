@@ -1,0 +1,80 @@
+name: 医薬品供給状況の更新と公開
+
+# 実行契機:
+#   - 毎日 1 回（日本時間の早朝 05:00 = UTC 20:00）。cron は UTC で書く点に注意。
+#   - 手動実行（workflow_dispatch）。
+on:
+  schedule:
+    - cron: "0 20 * * *"   # UTC 20:00 = JST 翌 05:00
+  workflow_dispatch:
+
+# Pages へのデプロイと data.json のコミットに必要な権限。
+permissions:
+  contents: write   # data.json をコミット＆プッシュ
+  pages: write      # GitHub Pages へデプロイ
+  id-token: write   # Pages デプロイの OIDC
+
+# 同時実行を 1 本に制限（更新の取りこぼし・競合を防ぐ）。
+concurrency:
+  group: iyakuhin-kyoukyu
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: iyakuhin-kyoukyu
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Python をセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 依存をインストール
+        run: pip install -r requirements.txt
+
+      # 取得元の構造変化などで失敗した場合、ここで非ゼロ終了しジョブを失敗させる。
+      # （古いデータのまま黙って公開されるのを防ぐ。）
+      - name: 最新データを取得して data.json を生成
+        run: python scripts/fetch_and_convert.py
+
+      - name: 差分があれば data.json をコミット
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain docs/data.json)" ]; then
+            git add docs/data.json
+            git commit -m "医薬品供給状況データを自動更新"
+            git push
+          else
+            echo "変更なし（data.json は最新）。"
+          fi
+
+  deploy:
+    needs: update            # 取得・変換が成功したときだけ公開する
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: リポジトリを取得（最新の data.json を含む）
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Pages を設定
+        uses: actions/configure-pages@v5
+
+      - name: 公開ディレクトリをアップロード
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: iyakuhin-kyoukyu/docs
+
+      - name: GitHub Pages へデプロイ
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>医薬品 出荷調整・供給状況 検索</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#1c2430; --muted:#5b6672;
+    --line:#e2e6ea; --accent:#1e6fd9;
+    --normal-bg:#e6f6ec; --normal-ink:#177245; --normal-line:#8fd3a8;
+    --limited-bg:#fff5e0; --limited-ink:#9a6400; --limited-line:#f0c774;
+    --stop-bg:#fde7e7; --stop-ink:#b3261e; --stop-line:#efa39d;
+    --unknown-bg:#eceff1; --unknown-ink:#54606b; --unknown-line:#cfd6dc;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+    background:var(--bg);color:var(--ink);line-height:1.5;font-size:15px}
+  header{background:var(--card);border-bottom:1px solid var(--line);padding:14px 16px 10px}
+  .wrap{max-width:960px;margin:0 auto;padding:0 16px}
+  h1{font-size:19px;margin:0 0 6px}
+  /* データ鮮度バナー: 実務安全上、常に大きく表示する */
+  .freshness{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;
+    background:#eef4fd;border:1px solid #cfe0fa;border-radius:8px;padding:10px 14px;margin:8px 0}
+  .freshness .big{font-size:20px;font-weight:700;color:#123b73}
+  .freshness .lbl{font-size:12px;color:var(--muted);margin-right:4px}
+  .freshness.warn{background:#fdecec;border-color:#f2b8b3}
+  .freshness.warn .big{color:#b3261e}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:12px 0 4px}
+  #q{flex:1 1 260px;min-width:200px;font-size:16px;padding:10px 12px;border:1px solid var(--line);
+    border-radius:8px;background:#fff}
+  .toggles{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{font-size:13px;padding:6px 11px;border-radius:999px;border:1px solid var(--line);
+    background:#fff;cursor:pointer;user-select:none}
+  .chip[aria-pressed="true"]{border-color:var(--accent);background:#eaf2fd;color:#124a91;font-weight:600}
+  .chip.normal[aria-pressed="true"]{border-color:var(--normal-line);background:var(--normal-bg);color:var(--normal-ink)}
+  .chip.limited[aria-pressed="true"]{border-color:var(--limited-line);background:var(--limited-bg);color:var(--limited-ink)}
+  .chip.stop[aria-pressed="true"]{border-color:var(--stop-line);background:var(--stop-bg);color:var(--stop-ink)}
+  .meta{font-size:13px;color:var(--muted);margin:8px 0}
+  main{padding:8px 0 60px}
+  .group{background:var(--card);border:1px solid var(--line);border-radius:10px;margin:12px 0;overflow:hidden}
+  .group>h2{font-size:16px;margin:0;padding:10px 14px;background:#f2f5f8;border-bottom:1px solid var(--line)}
+  .group>h2 .count{font-size:12px;color:var(--muted);font-weight:400;margin-left:6px}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px}
+  th{font-size:12px;color:var(--muted);font-weight:600;background:#fafbfc}
+  tr:last-child td{border-bottom:none}
+  .badge{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap}
+  .b-normal{background:var(--normal-bg);color:var(--normal-ink);border:1px solid var(--normal-line)}
+  .b-limited{background:var(--limited-bg);color:var(--limited-ink);border:1px solid var(--limited-line)}
+  .b-stop{background:var(--stop-bg);color:var(--stop-ink);border:1px solid var(--stop-line)}
+  .b-unknown{background:var(--unknown-bg);color:var(--unknown-ink);border:1px solid var(--unknown-line)}
+  .newtag{display:inline-block;font-size:10px;font-weight:700;color:#fff;background:#e8590c;
+    border-radius:4px;padding:1px 5px;margin-left:6px;vertical-align:middle}
+  .vol{font-size:12px;color:var(--muted)}
+  .empty{text-align:center;color:var(--muted);padding:40px 0}
+  .disclaimer{max-width:960px;margin:24px auto 0;padding:14px 16px;font-size:12px;color:#6a4a00;
+    background:#fff8e6;border:1px solid #f0dca0;border-radius:8px}
+  .disclaimer a{color:var(--accent)}
+  footer{border-top:1px solid var(--line);background:var(--card);padding:14px 0;margin-top:24px}
+  @media (max-width:560px){
+    th.col-spec,td.col-spec{display:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>医薬品 出荷調整・供給状況 検索</h1>
+    <!-- データ鮮度バナー（いつ時点の情報か） -->
+    <div id="freshness" class="freshness">
+      <span><span class="lbl">データ掲載日</span><span class="big" id="pub-date">読み込み中…</span></span>
+      <span><span class="lbl">取得日時</span><span class="big" id="fetched-at">—</span></span>
+      <span><span class="lbl">件数</span><span class="big" id="item-count">—</span></span>
+    </div>
+
+    <div class="controls">
+      <input id="q" type="search" placeholder="成分名・販売名・メーカーで検索（ひらがな/カタカナ・全半角OK）" autocomplete="off">
+    </div>
+    <div class="controls">
+      <div class="toggles" id="status-toggles">
+        <span class="chip normal"  data-code="通常出荷"       aria-pressed="true" role="button" tabindex="0">通常出荷</span>
+        <span class="chip limited" data-code="限定出荷_自社事情" aria-pressed="true" role="button" tabindex="0">限定(自社)</span>
+        <span class="chip limited" data-code="限定出荷_他社影響" aria-pressed="true" role="button" tabindex="0">限定(他社)</span>
+        <span class="chip limited" data-code="限定出荷_その他"   aria-pressed="true" role="button" tabindex="0">限定(その他)</span>
+        <span class="chip limited" data-code="限定出荷"         aria-pressed="true" role="button" tabindex="0">限定出荷</span>
+        <span class="chip stop"    data-code="供給停止"         aria-pressed="true" role="button" tabindex="0">供給停止</span>
+        <span class="chip"         data-code="不明"             aria-pressed="true" role="button" tabindex="0">不明</span>
+      </div>
+      <label class="chip" style="cursor:pointer">
+        <input type="checkbox" id="new-only" style="vertical-align:middle;margin-right:4px">New のみ
+      </label>
+    </div>
+    <div class="meta" id="result-meta"></div>
+  </div>
+</header>
+
+<main class="wrap" id="results"></main>
+
+<footer>
+  <div class="disclaimer">
+    <strong>免責:</strong> 本ツールは厚労省公開データを自動処理した<strong>非公式の検索補助ツール</strong>であり、
+    抽出漏れ・誤りを含む可能性があります。算定・調剤・在庫判断は必ず
+    <a id="src-link" href="#" target="_blank" rel="noopener">原文Excel（リンク）</a>
+    および一次情報でご確認ください。
+    データ元:
+    <a href="https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/kenkou_iryou/iryou/kouhatu-iyaku/04_00003.html"
+       target="_blank" rel="noopener">厚生労働省「医療用医薬品供給状況」</a>
+  </div>
+</footer>
+
+<script>
+"use strict";
+
+// ---- 表記ゆれ吸収: カタカナ→ひらがな、全角英数→半角、小文字化、空白除去 ----
+function normalize(s){
+  if(!s) return "";
+  s = String(s);
+  // 全角英数記号 → 半角
+  s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(c){
+    return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+  });
+  // カタカナ → ひらがな
+  s = s.replace(/[ァ-ヶ]/g, function(c){
+    return String.fromCharCode(c.charCodeAt(0) - 0x60);
+  });
+  return s.toLowerCase().replace(/\s+/g, "");
+}
+
+// ---- status_code → バッジ用クラス ----
+function badgeClass(code){
+  if(code === "通常出荷") return "b-normal";
+  if(code === "供給停止") return "b-stop";
+  if(code === "不明") return "b-unknown";
+  return "b-limited"; // 限定出荷各種
+}
+
+function escapeHtml(s){
+  return String(s == null ? "" : s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+var DATA = null;
+
+function fmtDateTime(iso){
+  if(!iso) return "—";
+  // ISO(JST) をそのまま "YYYY-MM-DD HH:MM" に整形
+  var m = String(iso).match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+  return m ? (m[1] + " " + m[2]) : iso;
+}
+
+// ---- データ鮮度バナー ----
+function renderFreshness(){
+  var pub = DATA && DATA.published_date;
+  var fetched = DATA && DATA.fetched_at;
+  document.getElementById("pub-date").textContent = pub || "不明";
+  document.getElementById("fetched-at").textContent = fmtDateTime(fetched);
+  document.getElementById("item-count").textContent =
+    (DATA && DATA.item_count != null) ? (DATA.item_count + " 件") : "—";
+  var src = document.getElementById("src-link");
+  if(DATA && DATA.source_url){ src.href = DATA.source_url; }
+
+  // 掲載日不明、または取得から日が経ちすぎ → 警告表示
+  var banner = document.getElementById("freshness");
+  var stale = !pub;
+  if(fetched){
+    var days = (Date.now() - new Date(fetched).getTime()) / 86400000;
+    if(days > 8) stale = true; // 毎日更新のはずが 8 日超なら異常
+  }
+  banner.classList.toggle("warn", stale);
+}
+
+// ---- 検索・絞り込み ----
+function activeCodes(){
+  var set = {};
+  document.querySelectorAll("#status-toggles .chip").forEach(function(c){
+    set[c.getAttribute("data-code")] = (c.getAttribute("aria-pressed") === "true");
+  });
+  return set;
+}
+
+function filterItems(){
+  if(!DATA || !DATA.items) return [];
+  var q = normalize(document.getElementById("q").value);
+  var newOnly = document.getElementById("new-only").checked;
+  var codes = activeCodes();
+  return DATA.items.filter(function(it){
+    if(newOnly && !it.is_new) return false;
+    var code = it.supply_status_code || "不明";
+    if(codes[code] === false) return false;
+    if(codes[code] === undefined && codes["不明"] === false) return false;
+    if(q){
+      var hay = normalize((it.ingredient||"") + (it.brand||"") + (it.maker||""));
+      if(hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  });
+}
+
+function render(){
+  var items = filterItems();
+  var meta = document.getElementById("result-meta");
+  var box = document.getElementById("results");
+
+  meta.textContent = items.length + " 件表示"
+    + (DATA && DATA.item_count ? "（全 " + DATA.item_count + " 件中）" : "");
+
+  if(items.length === 0){
+    box.innerHTML = '<div class="empty">該当する品目がありません。</div>';
+    return;
+  }
+
+  // 成分名でグルーピング
+  var groups = {};
+  var order = [];
+  items.forEach(function(it){
+    var key = it.ingredient || "（成分名なし）";
+    if(!groups[key]){ groups[key] = []; order.push(key); }
+    groups[key].push(it);
+  });
+  order.sort(function(a,b){ return a.localeCompare(b, "ja"); });
+
+  var html = order.map(function(key){
+    var rows = groups[key].map(function(it){
+      var bc = badgeClass(it.supply_status_code);
+      var newTag = it.is_new ? '<span class="newtag">New</span>' : '';
+      var vol = it.volume_status ? '<span class="vol">出荷量: ' + escapeHtml(it.volume_status) + '</span>' : '';
+      return '<tr>'
+        + '<td>' + escapeHtml(it.brand) + newTag + '</td>'
+        + '<td>' + escapeHtml(it.maker) + '</td>'
+        + '<td class="col-spec">' + escapeHtml(it.spec) + '</td>'
+        + '<td><span class="badge ' + bc + '">' + escapeHtml(it.supply_status) + '</span> ' + vol + '</td>'
+        + '<td>' + escapeHtml(it.resume_prospect) + '</td>'
+        + '</tr>';
+    }).join("");
+    return '<section class="group">'
+      + '<h2>' + escapeHtml(key) + '<span class="count">' + groups[key].length + ' 品目</span></h2>'
+      + '<table><thead><tr>'
+      + '<th>販売名</th><th>メーカー</th><th class="col-spec">規格・剤形</th>'
+      + '<th>出荷対応</th><th>再開見込み</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table>'
+      + '</section>';
+  }).join("");
+
+  box.innerHTML = html;
+}
+
+// ---- イベント配線 ----
+function toggleChip(chip){
+  var cur = chip.getAttribute("aria-pressed") === "true";
+  chip.setAttribute("aria-pressed", cur ? "false" : "true");
+  render();
+}
+
+document.getElementById("q").addEventListener("input", render);
+document.getElementById("new-only").addEventListener("change", render);
+document.querySelectorAll("#status-toggles .chip").forEach(function(chip){
+  chip.addEventListener("click", function(){ toggleChip(chip); });
+  chip.addEventListener("keydown", function(e){
+    if(e.key === "Enter" || e.key === " "){ e.preventDefault(); toggleChip(chip); }
+  });
+});
+
+// ---- 起動: data.json を読み込む ----
+fetch("data.json", {cache: "no-store"})
+  .then(function(r){ if(!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+  .then(function(json){
+    DATA = json;
+    renderFreshness();
+    render();
+    if(!DATA.items || DATA.items.length === 0){
+      document.getElementById("results").innerHTML =
+        '<div class="empty">データがまだ取得されていません。'
+        + 'GitHub Actions による初回更新をお待ちください。</div>';
+    }
+  })
+  .catch(function(err){
+    document.getElementById("pub-date").textContent = "データ取得エラー";
+    document.getElementById("freshness").classList.add("warn");
+    document.getElementById("results").innerHTML =
+      '<div class="empty">data.json を読み込めませんでした（' + escapeHtml(err.message)
+      + '）。<br>初回の自動更新前、またはローカルで file:// から直接開いた場合に発生します。'
+      + '<br>ローカル確認時は簡易サーバ経由で開いてください（例: <code>python -m http.server</code>）。</div>';
+  });
+</script>
+</body>
+</html>

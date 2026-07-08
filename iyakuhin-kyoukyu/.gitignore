@@ -1,0 +1,5 @@
+# ダウンロードした Excel の一時ファイル・キャッシュ
+_latest.xlsx
+docs/_latest.xlsx
+__pycache__/
+*.pyc

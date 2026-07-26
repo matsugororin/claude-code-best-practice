@@ -86,10 +86,45 @@ def log(msg):
 
 # ---------------------------------------------------------------- 検証
 
+def fetch_live_options():
+    """索引DBの現在の multi_select 選択肢を取得する。
+
+    ALLOWED_強化対象 / ALLOWED_参照する記録 は原文確認前の推測値を含むため、
+    静的allow-listだけでは実際のDBの表記（例: "Σ獲得量" 等の細かい表記）と
+    ズレていても素通りしてしまう恐れがある。NOTION_TOKEN があれば実DBの
+    スキーマを取得し、静的allow-listとマージして検証精度を上げる。
+    トークンが無い場合は None を返し、静的allow-listのみで検証する
+    （--dry-run をトークン無しで使えるようにするため）。
+    """
+    token = os.environ.get("NOTION_TOKEN")
+    if not token:
+        return None
+
+    r = requests.get(f"{API}/databases/{DATABASE_ID}", headers=headers(), timeout=30)
+    if r.status_code != 200:
+        sys.exit(f"DBスキーマの取得に失敗しました: {r.status_code} {r.text}")
+
+    props = r.json().get("properties", {})
+    live = {}
+    for key in ("強化対象", "参照する記録"):
+        options = props.get(key, {}).get("multi_select", {}).get("options", [])
+        live[key] = {o["name"] for o in options}
+    return live
+
+
 def validate(elements):
     """allow-list 検証。1件でも違反があれば全件中止する。"""
     errors = []
     seen = set()
+
+    live = fetch_live_options()
+    if live is None:
+        log("警告: NOTION_TOKEN未設定のため、静的allow-listのみで検証します（実DBの語彙とは未照合）。")
+        allowed_強化対象 = ALLOWED_強化対象
+        allowed_参照する記録 = ALLOWED_参照する記録
+    else:
+        allowed_強化対象 = ALLOWED_強化対象 | live["強化対象"]
+        allowed_参照する記録 = ALLOWED_参照する記録 | live["参照する記録"]
 
     for i, el in enumerate(elements):
         name = el.get("要素名")
@@ -110,11 +145,11 @@ def validate(elements):
             errors.append(f"[{name}] 未知の確定度: {確定度}")
 
         for v in el.get("強化対象", []):
-            if v not in ALLOWED_強化対象:
+            if v not in allowed_強化対象:
                 errors.append(f"[{name}] 未知の強化対象: {v}")
 
         for v in el.get("参照する記録", []):
-            if v not in ALLOWED_参照する記録:
+            if v not in allowed_参照する記録:
                 errors.append(f"[{name}] 未知の参照する記録: {v}")
 
     if errors:
@@ -142,8 +177,9 @@ def fetch_existing_names():
         data = r.json()
         for page in data.get("results", []):
             title = page.get("properties", {}).get("要素名", {}).get("title", [])
-            if title:
-                names.add(title[0].get("plain_text", ""))
+            name = "".join(t.get("plain_text", "") for t in title).strip()
+            if name:
+                names.add(name)
 
         if not data.get("has_more"):
             break
@@ -212,6 +248,20 @@ def build_children(el):
     ]
 
 
+def render_body_preview(el):
+    """build_children() が組み立てるページ本文を、実際にNotion上で見える見た目に
+    近い形（見出し + 段落のテキスト）でdry-run出力用に整形する。"""
+    lines = []
+    for block in build_children(el):
+        btype = block["type"]
+        text = "".join(t["text"]["content"] for t in block[btype]["rich_text"])
+        if btype == "heading_2":
+            lines.append(f"## {text}")
+        else:
+            lines.append(text)
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------- 投入
 
 def create_page(el):
@@ -232,8 +282,11 @@ def run(elements, dry_run):
     if dry_run:
         log("\n=== DRY RUN（送信しません） ===")
         for el in elements:
-            log(f"\n--- {el['要素名']}")
+            log(f"\n--- {el['要素名']} " + "-" * 40)
+            log("[properties]")
             log(json.dumps(build_properties(el), ensure_ascii=False, indent=2))
+            log("[本文プレビュー]")
+            log(render_body_preview(el))
         log(f"\n合計 {len(elements)} 件を投入予定です。")
         return
 

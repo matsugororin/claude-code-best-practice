@@ -1,1 +1,8 @@
 plan/
+
+# Runtime artifacts from unity-thin-pages-import
+unity-thin-pages-import/failed.json
+unity-thin-pages-import/imported.log
+
+# Python bytecode
+__pycache__/
